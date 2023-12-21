@@ -1,0 +1,1 @@
+from cvrp.centr_cvrp import CVRP
