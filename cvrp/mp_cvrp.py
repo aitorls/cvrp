@@ -1,6 +1,5 @@
 import gurobipy as gp
 
-
 MSGDICT = {gp.GRB.LOADED : 'LOADED', 
            gp.GRB.OPTIMAL : 'OPTIMAL',
            gp.GRB.INFEASIBLE : 'INFEASIBLE',
@@ -17,34 +16,23 @@ MSGDICT = {gp.GRB.LOADED : 'LOADED',
            gp.GRB.USER_OBJ_LIMIT : 'USER_OBJ_LIMIT',
            gp.GRB.WORK_LIMIT : 'WORK_LIMIT'}
 
-class CVRP():
+class MP_CVRP():
 
-    def __init__(self, instance, n_vehicles):
+    def __init__(self, name, customers, n_vehicles):
 
-        # Read data from instance
-        self.name = instance["name"]
-        
+        self.name = name
+        self.customers = customers
         self.n_vehicles = n_vehicles
-        self.vehicles_capacity = instance["capacity"]
+        self.omega = []
 
-        self.node_coord = instance["node_coord"]
-        self.demand = instance["demand"]
-        self.edge_weight = instance["edge_weight"]
-
-        # Compute the graph
-        self.n_nodes = len(self.node_coord)
-
-        self.nodes = list(range(self.n_nodes))
-        self.customers = self.nodes[1:]
-        self.depot = self.nodes[0]
-
-        self.arcs = [(i,j) for i in self.nodes for j in self.nodes if i!= j]
-        self.vehicles = list(range(self.n_vehicles))
+        self.M = 10000
+        self.time = 0
 
         # Create the model
         self.model = gp.Model(self.name)
         self.set_verbose(False)
         self.build_model()
+
 
     def build_model(self):
         self.generate_vars()
@@ -60,52 +48,9 @@ class CVRP():
         self.set_gap(gap)
         self.model.optimize()
 
-    def generate_vars(self):
-        
-        self.arc_vars = self.model.addVars(self.arcs, vtype = gp.GRB.BINARY, name="x")    # TODO: Remove vehicles
-        self.capacity_vars = self.model.addVars(self.nodes,   lb=0.0, ub=self.vehicles_capacity, vtype = gp.GRB.CONTINUOUS, name="z") 
-    
-    def generate_obj(self):
-        cost_route = gp.quicksum(self.arc_vars[i,j]*self.edge_weight[i,j] for i,j in self.arcs)
-        self.model.setObjective(cost_route, gp.GRB.MINIMIZE)
-
-
     def set_verbose(self, verbose):
         self.model.Params.LogToConsole = int(verbose)
-
-    def generate_cons(self):
-        
-        # Visit each node once
-        self.model.addConstrs(
-            (gp.quicksum(self.arc_vars[i, j] for i in self.nodes if (i,j)  in self.arcs) 
-            == 
-            1
-            for j in self.customers),
-            name="visit_customers")
-
-        # Flow conservation
-        self.model.addConstrs(
-            (gp.quicksum(self.arc_vars[i, j]  for i in self.nodes if (i,j)  in self.arcs) 
-            ==
-            gp.quicksum(self.arc_vars[j, i] for i in self.nodes if (j,i)  in self.arcs) 
-            for j in self.customers ),
-            name="flow_conservation")
-        
-        # Leave the depot
-        self.model.addConstr(
-            (gp.quicksum(self.arc_vars[self.depot, j] for j in self.customers if (self.depot,j)  in self.arcs) 
-            <=
-            self.n_vehicles),
-            name="leave_depot")
-        
-        # Capacity constraint
-        self.model.addConstrs(
-            (self.capacity_vars[j] 
-            >=
-            self.capacity_vars[i] + self.demand[j] - (self.vehicles_capacity+self.demand[j])*(1 - self.arc_vars[i, j])
-            for i in self.nodes for j in self.customers if (i,j)  in self.arcs),
-            name="capacity_constraint")
-
+    
     def set_time_limit(self,timeLimit):
         self.model.setParam('TimeLimit', timeLimit)
 
@@ -120,7 +65,49 @@ class CVRP():
     
     def get_time(self):
         return self.model.getAttr("Runtime") 
+    
+    def get_status(self):
+        return MSGDICT[self.model.getAttr("Status")]
+    
+    def there_is_solution(self):
+        return self.model.SolCount > 0
 
+    def generate_vars(self): # Dummy Vars
+        
+        self.dummy_customers_vars = self.model.addVars(self.customers, vtype = gp.GRB.CONTINUOUS, name="dummy_customers")    # TODO: Remove vehicles
+        self.dummy_vehicle_var = self.model.addVar( lb=0.0, ub=1.0, vtype = gp.GRB.CONTINUOUS, name="dummy_vehicle") 
+    
+    def generate_obj(self):
+
+        self.model.update()
+        cost_route = gp.quicksum( self.M*var for var in self.model.getVars() )
+        self.model.setObjective(cost_route, gp.GRB.MINIMIZE)
+
+    def generate_cons(self):
+        
+        # Visit each node once
+        self.cts_veh_visits = self.model.addConstrs(
+                                (self.dummy_customers_vars[i]
+                                >=
+                                1
+                                for i in self.customers), 
+                                name="visit_all")
+        
+        self.cts_veh = self.model.addConstr(
+                        (self.dummy_vehicle_var
+                        <= 
+                        self.n_vehicles),
+                        name="K-vehicles")    
+
+    def get_duals(self):
+        dual_customers = { i : self.cts_veh_visits[i].Pi for i in self.customers} 
+        dual_vehicle = self.cts_veh.Pi
+        return dual_customers, dual_vehicle
+    
+    def get_reduced_cost(self):
+        pass    
+    
+    """
     def get_solution(self):
         if self.there_is_solution():
             return self._get_solution()
@@ -166,10 +153,6 @@ class CVRP():
         return route
     
         
-    def get_status(self):
-        return MSGDICT[self.model.getAttr("Status")]
-    
-    def there_is_solution(self):
-        return self.model.SolCount > 0
-    
 
+
+    """
