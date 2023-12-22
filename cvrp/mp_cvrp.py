@@ -43,8 +43,8 @@ class MP_CVRP():
     def update(self):
         self.model.update()
 
-    def solve(self, timeLimit = None, gap = 0.0001):
-        self.set_time_limit(timeLimit)
+    def solve(self, time_limit = None, gap = 0.0001):
+        self.set_time_limit(time_limit)
         self.set_gap(gap)
         self.model.optimize()
 
@@ -103,9 +103,6 @@ class MP_CVRP():
         dual_customers = { i : self.cts_veh_visits[i].Pi for i in self.customers} 
         dual_vehicle = self.cts_veh.Pi
         return dual_customers, dual_vehicle
-    
-    def get_reduced_cost(self):
-        pass    
     
     """
     def get_solution(self):
