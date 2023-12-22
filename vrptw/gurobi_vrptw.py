@@ -118,7 +118,7 @@ class VRPTW():
             (self.time_vars[j] 
             >=
             self.time_vars[i] + self.edge_weight[i,j] + self.service_time[i] - (self.max_time)*(1 - self.arc_vars[i, j])
-            for i in self.customers for j in self.nodes if (i,j)  in self.arcs),
+            for i in self.nodes for j in self.customers if (i,j)  in self.arcs), #for i in self.customers for j in self.nodes if (i,j)  in self.arcs),
             name="time_constraint")
         
         # Time window constraint
